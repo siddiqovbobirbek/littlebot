@@ -1,10 +1,18 @@
-from django.shortcuts import render
 from urllib.parse import urlparse
 from django.conf import settings
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpResponse
 from django.urls.base import resolve, reverse
 from django.urls.exceptions import Resolver404
 from django.utils import translation
+from rest_framework import status
+from rest_framework import viewsets
+from rest_framework.response import Response
+from rest_framework import filters
+# from django_filters import rest_framework as filters
+
+from .serializers import *
+from .models import *
+from django.db.models import Prefetch
 
 def set_language(request, language):
     for lang, _ in settings.LANGUAGES:
@@ -24,139 +32,169 @@ def set_language(request, language):
         response = HttpResponseRedirect("/")
     return response
 
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.response import Response
-from rest_framework import filters
-from .models import *
-from .serializer import *
-class BotUserViewset(ModelViewSet):
-    queryset = BotUser.objects.all()
+def index(request):
+    return HttpResponse("Hello, world. You're at the polls index.")
+
+
+class BotUserViewSet(viewsets.ModelViewSet):
     serializer_class = BotUserSerializer
+    queryset = BotUser.objects.all()
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name']
+    search_fields = ['name', ]
 
-    
-class CategoryViewset(ModelViewSet):
-    queryset = Category.objects.all()
+class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
+    queryset = Category.objects.all()
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name']
+    search_fields = ['name', 'subcategories__name', 'name_uz', 'subcategories__name_uz', 'name_ru', 'subcategories__name_ru', ]
+    
+    # def get_queryset(self):
+    #     queryset = Category.objects.all()
+    #     category = self.request.query_params.get('q', None)
+    #     if category is not None:
+    #         queryset = queryset.filter(category=category)
+    #     return queryset
+    
 
-
-class SubCategoryViewset(ModelViewSet):
-    queryset  = SubCategory.objects.all()
+class SubCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = SubCategorySerializer
+    queryset = SubCategory.objects.all()
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name']
+    search_fields = ['name', 'category__name', 'name_uz', 'category__name_uz', 'name_ru', 'category__name_ru', ]
 
-    
-class ProductViewset(ModelViewSet):
-    queryset = Product.objects.all()
+    def filter_queryset(self, queryset):
+        # SubCategory.refresh_from_db()
+        term = self.request.query_params.get('search', None)
+        print(term)
+        print(SubCategory.objects.all())
+        result = SubCategory.objects.filter(category__name__contains=term)
+        print(result)
+        return result
+
+class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
+    queryset = Product.objects.all()
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name','price','about']
+    search_fields = ['name', 'price', 'about' ]
 
 
-class OrderViewset(ModelViewSet):
-    queryset = Order.objects.all()
+class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
+    queryset = Order.objects.all()
 
 
-class OrderItemViewset(ModelViewSet):
-    queryset = OrderItem.objects.all()
+class OrderItemViewSet(viewsets.ModelViewSet):
     serializer_class = OrderItemSerializer
-    
+    queryset = OrderItem.objects.all()
 
 
 from rest_framework.views import APIView
+
 class ChangeLanguage(APIView):
-    def post(self,request):
-        data = request.POST
-        data =data.dict()
-        telegram_id = data['telegram_id']
-        user = BotUser.objects.get(telegram_id = telegram_id)
-        user.language = data['language']
+    def post(self, request):
+        if not request.method == 'POST':
+            return Response({'status': 'Method not allowed!'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        data = request.data
+        telegram_id = data.get('telegram_id', None)
+        
+        try:
+            user = BotUser.objects.get(telegram_id=telegram_id)
+        except BotUser.DoesNotExist:
+            return Response({'status': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        user.language = data.get('language', user.language)
         user.save()
-        return Response({'status':'Language changed.'})
+        return Response({'status': 'Language changed!'})
     
-
 class ChangePhoneNumber(APIView):
-    def post(self,request):
+    def post(self, request):
         data = request.POST
-        data =data.dict()
-        telegram_id = data['telegram_id']
-        user = BotUser.objects.get(telegram_id = telegram_id)
-        user.phone = data['phone']
-        user.save()
-        return Response({'status':'Phone Number changed.'})
-    
-
-class OrderedItems(APIView):
-    def post(self,request):
-        data =  request.POST
         data = data.dict()
-        user = BotUser.objects.get(telegram_id=data['telegram_id'])
-        orders = Order.objects.filter(user=user)
-        # orders = Order.objects.get(user=user)
-        serializer = OrderSerializer(orders,many=True)
-        return Response(serializer.data)
+        telegram_id = data.get('telegram_id')
+        user = BotUser.objects.get(telegram_id=telegram_id)
+        user.phone = data.get('phone')
+        user.save()
+        return Response({'status': 'Phone number changed!'})
     
+class OrderItems(APIView):
+    def post(self, request):
+        data = request.POST
+        data = data.dict()
+        telegram_id = data.get('telegram_id')
+        user = BotUser.objects.get(telegram_id=telegram_id)
+        order = Order.objects.filter(user=user)
+        serializer = OrderSerializer(order, many=True)
+        return Response(serializer.data)
 
+    # def post(self, request):
+    #     data = request.POST
+    #     data = data.dict()
+    #     telegram_id = data.get('telegram_id')
+        
+    #     user = BotUser.objects.prefetch_related(
+    #         Prefetch('order_set', queryset=Order.objects.select_related('user'))
+    #     ).get(telegram_id=telegram_id)
+        
+    #     orders = user.order_set.all()
+    #     serializer = OrderSerializer(orders, many=True)
+        
+    #     return Response(serializer.data)
 
 class SetOrderItem(APIView):
-    def post(self,request):
+    def post(self, request):
         data = request.POST
         data = data.dict()
-        telegram_id = data['telegram_id']
-        product = data['product']
-        quantity = data['quantity']
+
+        telegram_id = data.get('telegram_id')
+        product = data.get('product')
+        quantity = data.get('quantity')
         user = BotUser.objects.get(telegram_id=telegram_id)
         product = Product.objects.get(id=product)
-        order,created  = Order.objects.get_or_create(user=user)
-        orderitem, created = OrderItem.objects.get_or_create(order=order, product=product)
-        if int(quantity) == 0:
-            orderitem.delete()
-            return Response({'status':'Order Item Deleted'})
+        order, created = Order.objects.get_or_create(user=user)
+        order_item, created = OrderItem.objects.get_or_create(order=order, product=product)
+
+        if int(quantity) > 0:
+            order_item.quantity = quantity
+            order_item.save()
+            return Response({'status': 'Order item updated!'})
         else:
-            orderitem.quantity = quantity
-            orderitem.save()
-            return Response({'status':'Order Item Updated'})
-        
+            order_item.delete()
+            return Response({'status': 'Order item deleted!'})
+
 
 class DestroyBasket(APIView):
-    def post(self,request):
-        data = request.data 
-        data= data.dict()
-        telegram_id = data['telegram_id']
+    def post(self, request):
+        data = request.POST
+        data = data.dict()
+        telegram_id = data.get('telegram_id')
         user = BotUser.objects.get(telegram_id=telegram_id)
         try:
-            order= Order.objects.get(user=user)
+            order = Order.objects.get(user=user)
             order.delete()
-            
         except Order.DoesNotExist:
             pass
         except Exception as e:
+            print(e)
             pass
-        return Response({'status':'Basket Deleted'})
+        return Response({'status': 'Basket deleted!'})
     
-
 class BotUserInfo(APIView):
-    def post(self,request):
+    def post(self, request):
         data = request.data
-        botuser = BotUser.objects.get(telegram_id = data['telegram_id'])    
-        serializer=  BotUserSerializer(instance=botuser,partial=True) 
+        botuser = BotUser.objects.get(telegram_id=data.get('telegram_id'))
+        serializer = BotUserSerializer(instance=botuser, partial=True)
         return Response(serializer.data)
-    
 
 class DeleteItem(APIView):
-    def post(self,request):
-        data = request.data 
-        data= data.dict()
-        telegram_id = data['telegram_id']
-        product = data['product']
+    def post(self, request):
+        data = request.data
+        data = data.dict()
+
+        telegram_id = data.get('telegram_id')
+        product = data.get('product')
         user = BotUser.objects.get(telegram_id=telegram_id)
         product = Product.objects.get(id=product)
-        order,created  = Order.objects.get_or_create(user=user)
-        orderitem, created = OrderItem.objects.get_or_create(order=order, product=product)
-        orderitem.delete()
-        return Response({'status':"Order Item deleted"})
+        order, created = Order.objects.get_or_create(user=user)
+        order_item, created = OrderItem.objects.get_or_create(order=order, product=product)
+        order_item.delete()
+        return Response({'status': 'Order item deleted!'})
