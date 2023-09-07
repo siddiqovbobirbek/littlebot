@@ -34,27 +34,40 @@ class BotUserViewset(ModelViewSet):
     serializer_class = BotUserSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['name']
+
+    
 class CategoryViewset(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['name']
+
+
 class SubCategoryViewset(ModelViewSet):
     queryset  = SubCategory.objects.all()
     serializer_class = SubCategorySerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['name']
+
+    
 class ProductViewset(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ['name','price','about']
+
+
 class OrderViewset(ModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
+
+
 class OrderItemViewset(ModelViewSet):
     queryset = OrderItem.objects.all()
     serializer_class = OrderItemSerializer
+    
+
+
 from rest_framework.views import APIView
 class ChangeLanguage(APIView):
     def post(self,request):
@@ -65,6 +78,8 @@ class ChangeLanguage(APIView):
         user.language = data['language']
         user.save()
         return Response({'status':'Language changed.'})
+    
+
 class ChangePhoneNumber(APIView):
     def post(self,request):
         data = request.POST
@@ -74,6 +89,8 @@ class ChangePhoneNumber(APIView):
         user.phone = data['phone']
         user.save()
         return Response({'status':'Phone Number changed.'})
+    
+
 class OrderedItems(APIView):
     def post(self,request):
         data =  request.POST
@@ -83,6 +100,9 @@ class OrderedItems(APIView):
         # orders = Order.objects.get(user=user)
         serializer = OrderSerializer(orders,many=True)
         return Response(serializer.data)
+    
+
+
 class SetOrderItem(APIView):
     def post(self,request):
         data = request.POST
@@ -101,6 +121,8 @@ class SetOrderItem(APIView):
             orderitem.quantity = quantity
             orderitem.save()
             return Response({'status':'Order Item Updated'})
+        
+
 class DestroyBasket(APIView):
     def post(self,request):
         data = request.data 
@@ -116,12 +138,16 @@ class DestroyBasket(APIView):
         except Exception as e:
             pass
         return Response({'status':'Basket Deleted'})
+    
+
 class BotUserInfo(APIView):
     def post(self,request):
         data = request.data
         botuser = BotUser.objects.get(telegram_id = data['telegram_id'])    
         serializer=  BotUserSerializer(instance=botuser,partial=True) 
         return Response(serializer.data)
+    
+
 class DeleteItem(APIView):
     def post(self,request):
         data = request.data 

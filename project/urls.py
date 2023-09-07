@@ -26,8 +26,8 @@ urlpatterns = [
     path("set_language/<str:language>", set_language, name="set-language"),
 ]
 
-urlpatterns += [
+urlpatterns += i18n_patterns(
     path('admin/', admin.site.urls),
     path('api/', include('myapp.urls'))
-]
+)
 urlpatterns += static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
